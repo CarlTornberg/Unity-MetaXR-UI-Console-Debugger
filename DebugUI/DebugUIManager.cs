@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.PlayerLoop;
 using UnityEngine.XR;
 
 public class DebugUIManager : MonoBehaviour
@@ -16,16 +17,16 @@ public class DebugUIManager : MonoBehaviour
     private TextMeshProUGUI _timeTextTMP;
 
     [SerializeField]
-    [Tooltip("Hold the TMP for the refresh rate [hz].")]
-    private TextMeshProUGUI _refreshRateHzTextTMP;
+    [Tooltip("Hold the TMP for the headset FPS.")]
+    private TextMeshProUGUI _xrDeviceFpsTMPro;
 
     [SerializeField]
-    [Tooltip("Hold the TMP for refresh rate [ms].")]
-    private TextMeshProUGUI _refreshRateMsTextTMP;
+    [Tooltip("Hold the TMP for App FPS.")]
+    private TextMeshProUGUI _appFpsTMPro;
 
     [SerializeField]
     [Tooltip("Max logs cached.")]
-    private int _maxQueueSize = 15;
+    private static int _maxQueueSize = 50;
 
     [SerializeField]
     [Tooltip("Whether the list is presented in falling or ascending order.")]
@@ -34,13 +35,21 @@ public class DebugUIManager : MonoBehaviour
     /// <summary>
     /// Used to maintain status if the event is subscribed to or not to avoid accidental multiple subscriptions.
     /// </summary>
-    private bool _isEnabled = false;
+    private static bool _isEnabled = false;
 
     /// <summary>
     /// Cached log entries.
     /// Latest entry at [0].
     /// </summary>
-    private List<DebugLog> _logQueue;
+    private static List<DebugLog> _logQueue = new ();
+
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void StartDebugger()
+    {
+        SetContinuousMode(true);
+    }
+
 
     private void OnEnable()
     {
@@ -52,28 +61,33 @@ public class DebugUIManager : MonoBehaviour
         SetContinuousMode(false);
     }
 
+    public void ToggleEnable()
+    {
+        this.gameObject.SetActive(!this.gameObject.activeSelf);
+    }
+
     /// <summary>
     /// Keeps track when the time TMP was last updated.
     /// </summary>
     private float _last = 0;
     private void Update()
     {
-        _refreshRateHzTextTMP.text = $"Refresh rate [hz]: {Math.Round(XRDevice.refreshRate)}";
-        _refreshRateMsTextTMP.text = $"Refresh rate [ms]: {Math.Round(100 / XRDevice.refreshRate, 2)}";
+        _xrDeviceFpsTMPro.text = $"XRDevice FPS: {Math.Round(XRDevice.refreshRate)}";
+        _appFpsTMPro.text = $"App FPS: {Math.Round(1 / (Time.smoothDeltaTime))}";
 
         // Not sure if needed to check the time since last update. Though process is that this saves on the CPU/GPU slightly.
         if (Time.realtimeSinceStartup - _last > 0.1)
         {
             _timeTextTMP.text = $"[{DateTime.Now.Hour}:{DateTime.Now.Minute}:{DateTime.Now.Second}]";
             _last = Time.realtimeSinceStartup;
+            UpdateText();
         }
     }
     private void Awake()
     {
-        _logQueue = new List<DebugLog>();
     }
 
-    public void SetContinuousMode(bool b)
+    public static void SetContinuousMode(bool b)
     {
         if (_isEnabled != b)
         {
@@ -97,13 +111,14 @@ public class DebugUIManager : MonoBehaviour
     /// <param name="condition"></param>
     /// <param name="stackTrace"></param>
     /// <param name="type"></param>
-    private void HandleLog(string condition, string stackTrace, LogType type)
+    private static void HandleLog(string condition, string stackTrace, LogType type)
     {
+        
+
         _logQueue.Add(new DebugLog(DateTime.Now, condition, stackTrace, type));
         if (_logQueue.Count > _maxQueueSize)
             _logQueue.RemoveAt(0);
 
-        UpdateText();
     }
 
     private void UpdateText()
@@ -117,6 +132,12 @@ public class DebugUIManager : MonoBehaviour
         else 
             for (int i = 0; i < _logQueue.Count; i++)
                 WriteText(i);
+    }
+
+    public void ClearConsole()
+    {
+        _logQueue = new();
+        UpdateText();
     }
 
     private void WriteText(int i)
